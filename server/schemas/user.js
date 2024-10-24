@@ -16,6 +16,10 @@ const User = new Schema({
             'Invalid email format',
         ],
     },
+    avatar: {
+        type: String,
+        default: 'https://via.placeholder.com/150x150'
+    },
     phone_number: {
         type: String,
     },

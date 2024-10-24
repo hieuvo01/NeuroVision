@@ -8,13 +8,15 @@ import nodemailer from 'nodemailer';
 const route = express.Router();
 
 
-
+// tao ham generate ma OTP
 export const OTPgeneration = () => {
     const otp = Math.floor(100000 + Math.random() * 900000);
     return otp;
 }
 
-export const sendMail = async (to, subject, text, html) => {
+
+
+export const sendMail = async (to, subject, text, html) => {   // chuc nang gui mail xac nhan
     try {
         const transporter = nodemailer.createTransport({
             service: 'gmail',
@@ -40,11 +42,11 @@ export const sendMail = async (to, subject, text, html) => {
 route.post('/registration', async (req, res) => {
     const salt = 10;
     try {
-        const payload = req.body;
+        const payload = req.body;               // lay thong tin tu cac truong trong PostMan
         if (!payload.name ||!payload.username ||!payload.email ||!payload.phone_number || !payload.password) {
             return res.status(400).json({ message: 'All fields are required' });
         }
-        const existingUser = await UserSchema.findOne({ email: payload.email });
+        const existingUser = await UserSchema.findOne({ email: payload.email });        //kiem tra neu email da ton tai thi thong bao
         if (existingUser) {
             return res.status(400).json({ message: 'Email already exists' });
         }
@@ -132,6 +134,7 @@ route.post('/login', async (req, res) => {
     }})
     
 
+    // luu thong tin user sau khi dang nhap
     route.get('/me', async (req, res) => {
         try {
             const { token } = req.query;
@@ -143,26 +146,49 @@ route.post('/login', async (req, res) => {
         }
     })
 
-    route.post('/otp-verification', async (req, res) => {
+    //user settings
+    route.put('/update-settings', async (req, res) => {
         try {
-            const { otp_code, user_id } = req.body;
-            const authUser = await AuthSchema.findById(user_id);
-            if(!authUser){
-              return res.status(404).json({ message: 'User not found' });
+            const { token } = req.query;
+            const result = jwt.decode(token, process.env.JWT_SECRET);
+            const { name, phone_number, avatar } = req.body;
+            if(!name ||!phone_number || !avatar){
+                return res.status(400).json({ message: 'All fields are required' });
             }
-            if(authUser.otp_code!== otp_code){
-              return res.status(400).json({ message: 'Invalid OTP code' });
-            }
-            authUser.otp_code = null;
-            await authUser.save();
-            user = await UserSchema.findByIdAndUpdate({_id: user_id}, { isVerified: true}, { new: true });
-            res.json(user);
+            const user = await UserSchema.findByIdAndUpdate({_id: result._id}, {name, phone_number, avatar}, { new: true });
+            res.status(200).json(user);
         } catch (error) {
             console.log(error);
             res.status(500).json({ message: error.errors});
         }
     })
 
+    //doi mat khau
+    route.put('/change-password', async (req, res) => {
+        try {
+            const { token } = req.query;
+            const result = jwt.decode(token, process.env.JWT_SECRET);
+            const { current_password, new_password } = req.body;
+            if(!current_password ||!new_password){
+                return res.status(400).json({ message: 'All fields are required' });
+            }
+            const user = await AuthSchema.findOne({ user_id: result._id});
+            console.log(user);
+            const validPassword = await bcrypt.compare(current_password, user.password);
+            if (!validPassword) {
+                return res.status(401).json({ message: 'Invalid current password' });
+            }
+            const salt = 10;
+            const hashedPassword = await bcrypt.hash(new_password, salt);
+            await AuthSchema.updateOne({user_id: result._id}, {password: hashedPassword});
+            res.status(200).json({ message: 'Password changed successfully!'});
+            } catch (error) {
+                console.log(error);
+                res.status(500).json({ message: error.errors});
+            }
+        })
+
+    // xac nhan ma OTP bang URL
     route.get('/otp-verification-by-url', async (req, res) => {
         try {
             const { otp_code, user_id } = req.query;
