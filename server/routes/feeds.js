@@ -4,15 +4,17 @@ const route = express.Router();
 import dotenv from "dotenv";
 import { v2 as cloudinary } from "cloudinary";
 import FeedsSchema from "../schemas/feeds.js";
+import jwt from "jsonwebtoken";
 dotenv.config();
 
 // Configuration
-cloudinary.config({
-  cloud_name: process.env.CLOUD_APP_NAME,
-  api_key: process.env.CLOUD_API_KEY,
-  api_secret: process.env.CLOUD_API_KEY_SECRET, // Click 'View API Keys' above to copy your API secret
-});
+// cloudinary.config({
+//   cloud_name: process.env.CLOUD_APP_NAME,
+//   api_key: process.env.CLOUD_API_KEY,
+//   api_secret: process.env.CLOUD_API_KEY_SECRET, // Click 'View API Keys' above to copy your API secret
+// });
 
+// ham tao feed (image)
 route.post("/create", async (req, res, next) => {
   try {
     const { token } = req.query;
@@ -21,20 +23,19 @@ route.post("/create", async (req, res, next) => {
       return res.status(401).json({ message: "Login first" });
     }
     const { title, description, price, type, url } = req.body;
-    if (!title || !description || !price || !type || !url) {
+    if (!title || !description || price === null || !type || !url) {
       return res.status(400).json({ message: "All fields are required" });
     }
-    const cloud_url = await cloudinary.uploader.upload(url);
+    // const cloud_url = await cloudinary.uploader.upload(url);
     const feed = await FeedsSchema.create({
       user_id: user.id,
       title,
-      public_id: cloudinary.public_id,
       description,
       price,
       type,
       text: "",
-      image: type === "image" ? cloud_url.url : "",
-      video: type === "video" ? cloud_url.url : "",
+      image: type === "image" ? url : "",
+      video: type === "video" ? url : "",
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -65,7 +66,6 @@ route.put("/:id", async (req, res, next) => {
     if (feed_id.user_id !== user._id) {
       return res.status(403).json({ message: "Forbidden" }); //kiem tra user co quyen xoa feed hay khong
     }
-    const cloud_url = await cloudinary.uploader.upload(url);
     const feed = await FeedsSchema.findByIdAndUpdate(id, {
       user_id: user.id,
       title,
@@ -73,8 +73,8 @@ route.put("/:id", async (req, res, next) => {
       price,
       type,
       text: "",
-      image: type === "image" ? cloud_url.url : "",
-      video: type === "video" ? cloud_url.url : "",
+      image: type === "image" ? url : "",
+      video: type === "video" ? url : "",
       updatedAt: new Date(),
     });
     return res.status(200).json({ message: feed });
@@ -100,7 +100,6 @@ route.delete("/:id", async (req, res, next) => {
     if (feed_id.user_id !== user._id) {
       return res.status(403).json({ message: "Forbidden" }); //kiem tra user co quyen xoa feed hay khong
     }
-    await cloudinary.uploader.destroy(feed_id.public_id); //xoa anh khi xoa feed
     await FeedsSchema.findByIdAndDelete(id);
     return res.status(200).json({ message: "Feed deleted successfully" });
   } catch (error) {
@@ -112,10 +111,16 @@ route.delete("/:id", async (req, res, next) => {
 //search feed
 route.get("/search", async (req, res, next) => {
   try {
-    const { keyword } = req.query;
-    const feeds = await FeedsSchema.find({
-      $text: { $search: keyword },
-    });
+    const query = {};
+    if (req.query.keywords) {
+      const keyword = req.query.keywords.split(" ").join(" | ");
+      query.$text = { $search: keyword };
+    }
+    if (req.query.type) {
+      query.type = req.query.type;
+    }
+
+    const feeds = await FeedsSchema.find(query);
     return res.status(200).json({ feeds });
   } catch (error) {
     console.log(error);
@@ -123,7 +128,7 @@ route.get("/search", async (req, res, next) => {
   }
 });
 
-// respond with "hello world" when a GET request is made to the homepage
+// route mac dinh
 route.get("/", (req, res) => {
   res.send("hello world");
 });
